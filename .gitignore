@@ -45,3 +45,8 @@ Thumbs.db
 
 vite.config.*.timestamp*
 test-output
+
+# Terraform
+infra/aws-bootstrap/terraform.tfvars
+infra/aws-bootstrap/.terraform/
+infra/aws-bootstrap/.terraform.lock.hcl
