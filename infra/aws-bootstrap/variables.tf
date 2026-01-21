@@ -42,3 +42,9 @@ variable "db_password" {
   type      = string
   sensitive = true
 }
+
+variable "broker_api_key" {
+  type        = string
+  sensitive   = true
+  description = "API key for authenticating requests to the broker Lambda"
+}

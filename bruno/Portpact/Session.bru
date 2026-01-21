@@ -1,0 +1,28 @@
+meta {
+  name: Session
+  type: http
+  seq: 1
+}
+
+post {
+  url: https://4de5t9l2te.execute-api.us-east-2.amazonaws.com/session
+  body: json
+  auth: apikey
+}
+
+auth:apikey {
+  key: x-api-key
+  value: 1337
+  placement: header
+}
+
+body:json {
+  {
+    "target": "rds-postgres"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

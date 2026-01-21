@@ -278,3 +278,111 @@ resource "aws_db_instance" "postgres" {
 
   tags = merge(local.tags, { Name = "${var.name_prefix}-postgres" })
 }
+
+# -----------------------
+# Broker Lambda + API Gateway
+# -----------------------
+
+# IAM role for Lambda
+resource "aws_iam_role" "broker" {
+  name = "${var.name_prefix}-broker-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action = "sts:AssumeRole"
+    }]
+  })
+  tags = local.tags
+}
+
+# CloudWatch Logs permissions
+resource "aws_iam_role_policy_attachment" "broker_logs" {
+  role       = aws_iam_role.broker.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# SSM StartSession permission for the gateway instance
+resource "aws_iam_role_policy" "broker_ssm" {
+  name = "${var.name_prefix}-broker-ssm"
+  role = aws_iam_role.broker.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "ssm:StartSession"
+        Resource = [
+          aws_instance.gateway.arn,
+          "arn:aws:ssm:${var.aws_region}::document/AWS-StartPortForwardingSessionToRemoteHost"
+        ]
+      }
+    ]
+  })
+}
+
+# Lambda function
+resource "aws_lambda_function" "broker" {
+  function_name = "${var.name_prefix}-broker"
+  role          = aws_iam_role.broker.arn
+  handler       = "index.handler"
+  runtime       = "nodejs20.x"
+  timeout       = 30
+  memory_size   = 256
+
+  filename         = "${path.module}/../broker/broker.zip"
+  source_code_hash = filebase64sha256("${path.module}/../broker/broker.zip")
+
+  environment {
+    variables = {
+      BROKER_API_KEY      = var.broker_api_key
+      GATEWAY_INSTANCE_ID = aws_instance.gateway.id
+      ALLOWED_RDS_HOST    = aws_db_instance.postgres.address
+      ALLOWED_RDS_PORT    = "5432"
+    }
+  }
+
+  tags = local.tags
+}
+
+# API Gateway HTTP API
+resource "aws_apigatewayv2_api" "broker" {
+  name          = "${var.name_prefix}-broker-api"
+  protocol_type = "HTTP"
+
+  tags = local.tags
+}
+
+# Lambda integration
+resource "aws_apigatewayv2_integration" "broker" {
+  api_id             = aws_apigatewayv2_api.broker.id
+  integration_type   = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri    = aws_lambda_function.broker.invoke_arn
+}
+
+# Route: POST /session
+resource "aws_apigatewayv2_route" "broker_session" {
+  api_id    = aws_apigatewayv2_api.broker.id
+  route_key = "POST /session"
+  target    = "integrations/${aws_apigatewayv2_integration.broker.id}"
+}
+
+# Default stage with auto-deploy
+resource "aws_apigatewayv2_stage" "broker" {
+  api_id      = aws_apigatewayv2_api.broker.id
+  name        = "$default"
+  auto_deploy = true
+
+  tags = local.tags
+}
+
+# Allow API Gateway to invoke Lambda
+resource "aws_lambda_permission" "broker_apigw" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.broker.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.broker.execution_arn}/*/*"
+}

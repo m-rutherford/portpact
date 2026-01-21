@@ -21,3 +21,12 @@ output "rds_username" {
 output "region" {
   value = var.aws_region
 }
+
+output "broker_api_url" {
+  description = "URL for the broker API (POST /session)"
+  value       = "${aws_apigatewayv2_api.broker.api_endpoint}/session"
+}
+
+output "broker_lambda_name" {
+  value = aws_lambda_function.broker.function_name
+}

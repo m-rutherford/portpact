@@ -50,3 +50,8 @@ test-output
 infra/aws-bootstrap/terraform.tfvars
 infra/aws-bootstrap/.terraform/
 infra/aws-bootstrap/.terraform.lock.hcl
+
+# Broker Lambda build artifacts
+infra/broker/dist/
+infra/broker/broker.zip
+infra/broker/node_modules/
